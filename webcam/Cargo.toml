@@ -6,7 +6,7 @@ description = "Virtual webcam proxy — captures your camera and makes you look 
 
 [dependencies]
 paintify-core = { path = "../core" }
-nokhwa = { version = "0.10", features = ["input-native"] }
+nokhwa = { version = "0.10", features = ["input-native", "output-threaded"] }
 pixels = "0.17"
 winit = "0.30"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }

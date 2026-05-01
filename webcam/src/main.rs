@@ -18,6 +18,8 @@
 //!   D          — Toggle dithering
 //!   Escape     — Exit
 
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use image::{DynamicImage, ImageBuffer};
@@ -26,7 +28,7 @@ use nokhwa::{
     pixel_format::RgbFormat,
     query,
     utils::{ApiBackend, CameraIndex, RequestedFormat, RequestedFormatType},
-    Buffer, Camera,
+    Buffer, CallbackCamera,
 };
 use paintify_core::{paintify, PaintConfig};
 use pixels::{Pixels, SurfaceTexture};
@@ -45,7 +47,9 @@ const INITIAL_HEIGHT: u32 = 480;
 struct PaintifyApp {
     window: Option<Window>,
     pixels: Option<Pixels<'static>>,
-    camera: Option<Camera>,
+    camera: Option<CallbackCamera>,
+    frame_counter: Arc<AtomicU64>,
+    last_processed_frame: u64,
     config: PaintConfig,
     target_fps: u32,
     last_frame_time: Instant,
@@ -61,6 +65,8 @@ impl PaintifyApp {
             window: None,
             pixels: None,
             camera: None,
+            frame_counter: Arc::new(AtomicU64::new(0)),
+            last_processed_frame: 0,
             config: PaintConfig::default()
                 .chunky(cli.pixel_size)
                 .extended_palette(cli.palette == 28)
@@ -91,10 +97,16 @@ impl PaintifyApp {
             RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
         let idx = CameraIndex::Index(0);
 
-        match Camera::new(idx, format) {
+        let counter = self.frame_counter.clone();
+        match CallbackCamera::new(idx, format, move |_buffer| {
+            counter.fetch_add(1, Ordering::Relaxed);
+        }) {
             Ok(mut cam) => {
                 cam.open_stream().expect("Failed to open camera stream");
-                log::info!("Camera opened: {}", cameras[0].human_name());
+                log::info!(
+                    "Camera opened: {} (threaded capture)",
+                    cameras[0].human_name()
+                );
                 self.camera = Some(cam);
             }
             Err(e) => {
@@ -104,11 +116,17 @@ impl PaintifyApp {
     }
 
     fn process_frame(&mut self) {
+        let current = self.frame_counter.load(Ordering::Relaxed);
+        if current == self.last_processed_frame {
+            return;
+        }
+        self.last_processed_frame = current;
+
         let Some(ref mut cam) = self.camera else {
             return;
         };
 
-        let frame: Buffer = match cam.frame() {
+        let frame: Buffer = match cam.last_frame() {
             Ok(f) => f,
             Err(_) => return,
         };
@@ -291,10 +309,6 @@ impl ApplicationHandler for PaintifyApp {
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// CLI argument parsing (manual — no clap dependency)
-// ---------------------------------------------------------------------------
 
 const HELP: &str = "\
 paintify-webcam — make your webcam look like MS Paint
