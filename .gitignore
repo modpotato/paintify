@@ -4,7 +4,7 @@ debug/
 **/*.rs.bk
 *.pdb
 
-# WASM build artifacts (pkg is tracked separately in frontend/)
+# WASM build artifacts (pkg is tracked separately in docs/)
 web/pkg/
 
 # IDE
@@ -16,3 +16,12 @@ web/pkg/
 # OS
 .DS_Store
 Thumbs.db
+Desktop.ini
+
+# Profiling
+*.profraw
+flamegraph.svg
+perf.data*
+
+# macOS
+*.dSYM/
