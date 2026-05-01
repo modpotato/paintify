@@ -50,6 +50,7 @@ struct PaintifyApp {
     camera: Option<CallbackCamera>,
     frame_counter: Arc<AtomicU64>,
     last_processed_frame: u64,
+    last_frame_arrival: Instant,
     config: PaintConfig,
     target_fps: u32,
     last_frame_time: Instant,
@@ -67,6 +68,7 @@ impl PaintifyApp {
             camera: None,
             frame_counter: Arc::new(AtomicU64::new(0)),
             last_processed_frame: 0,
+            last_frame_arrival: Instant::now(),
             config: PaintConfig::default()
                 .chunky(cli.pixel_size)
                 .extended_palette(cli.palette == 28)
@@ -104,7 +106,14 @@ impl PaintifyApp {
             counter.fetch_add(1, Ordering::Relaxed);
         }) {
             Ok(mut cam) => {
-                cam.set_frame_rate(30).ok();
+                let before_fps = cam.frame_rate().unwrap_or(0);
+                match cam.set_frame_rate(30) {
+                    Ok(()) => log::info!("set_frame_rate(30) OK"),
+                    Err(e) => log::error!("set_frame_rate(30) FAILED: {e}"),
+                }
+                let after_fps = cam.frame_rate().unwrap_or(0);
+                log::info!("Camera frame rate: before={before_fps}, after={after_fps}");
+
                 cam.open_stream().expect("Failed to open camera stream");
                 log::info!(
                     "Camera opened: {} (threaded capture)",
@@ -123,7 +132,11 @@ impl PaintifyApp {
         if current == self.last_processed_frame {
             return;
         }
+        let since_last = self.last_frame_arrival.elapsed();
+        self.last_frame_arrival = Instant::now();
         self.last_processed_frame = current;
+
+        let t0 = Instant::now();
 
         let Some(ref mut cam) = self.camera else {
             return;
@@ -166,6 +179,17 @@ impl PaintifyApp {
             if px.render().is_err() {
                 log::warn!("Render failed");
             }
+        }
+
+        let pipeline_ms = t0.elapsed().as_secs_f64() * 1000.0;
+        if self.frame_count % 30 == 0 {
+            log::info!(
+                "Frame #{current}: gap={:.0}ms, pipeline={:.0}ms, resolution={}x{}",
+                since_last.as_secs_f64() * 1000.0,
+                pipeline_ms,
+                rgb_buf.width(),
+                rgb_buf.height(),
+            );
         }
 
         self.frame_count += 1;
