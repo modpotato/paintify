@@ -70,7 +70,9 @@ impl PaintifyApp {
             config: PaintConfig::default()
                 .chunky(cli.pixel_size)
                 .extended_palette(cli.palette == 28)
-                .with_dithering(cli.dithering),
+                .with_dithering(cli.dithering)
+                .with_kuwahara(if cli.kuwahara { 2 } else { 0 })
+                .with_edges(cli.edges),
             target_fps: cli.fps,
             last_frame_time: Instant::now(),
             frame_count: 0,
@@ -102,6 +104,7 @@ impl PaintifyApp {
             counter.fetch_add(1, Ordering::Relaxed);
         }) {
             Ok(mut cam) => {
+                cam.set_frame_rate(30).ok();
                 cam.open_stream().expect("Failed to open camera stream");
                 log::info!(
                     "Camera opened: {} (threaded capture)",
@@ -321,6 +324,8 @@ OPTIONS:
     --pixel-size N    Pixel crunch factor, higher = chunkier (default: 3, range: 1–32)
     --palette N       Color palette: 16 or 28 (default: 16)
     --dithering       Enable Bayer ordered dithering
+    --no-kuwahara     Disable Kuwahara filter (oil-paint blobs)
+    --no-edges        Disable edge overlay (pencil outlines)
     --help, -h        Show this help message
 
 CONTROLS (in window):
@@ -335,6 +340,8 @@ struct CliArgs {
     pixel_size: u32,
     palette: u32,
     dithering: bool,
+    kuwahara: bool,
+    edges: bool,
 }
 
 impl Default for CliArgs {
@@ -344,6 +351,8 @@ impl Default for CliArgs {
             pixel_size: 3,
             palette: 16,
             dithering: false,
+            kuwahara: true,
+            edges: true,
         }
     }
 }
@@ -380,6 +389,12 @@ fn parse_args() -> CliArgs {
             }
             "--dithering" => {
                 cli.dithering = true;
+            }
+            "--no-kuwahara" => {
+                cli.kuwahara = false;
+            }
+            "--no-edges" => {
+                cli.edges = false;
             }
             other => {
                 eprintln!("Unknown flag: {other}");
