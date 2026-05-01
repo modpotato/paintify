@@ -107,6 +107,11 @@ impl PaintConfig {
         self.extended_palette = yes;
         self
     }
+
+    pub fn with_dithering(mut self, yes: bool) -> Self {
+        self.dithering = yes;
+        self
+    }
 }
 
 // ---------------------------------------------------------------------------

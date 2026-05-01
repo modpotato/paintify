@@ -6,19 +6,25 @@
 //! Use with OBS Virtual Camera: Window Capture the paintify-webcam window,
 //! then select "OBS Virtual Camera" in Zoom/Discord/Teams.
 //!
-//! Controls:
+//! ## Usage
+//! ```sh
+//! cargo run -p paintify-webcam
+//! cargo run -p paintify-webcam -- --fps 60 --pixel-size 3 --palette 28 --dithering
+//! ```
+//!
+//! ## Controls
 //!   ↑ / ↓      — Adjust pixel crunch factor (more = chunkier)
 //!   P          — Toggle between 16-color / 28-color palette
-//!   D          — Toggle dithering (requires `dithering` feature in core)
+//!   D          — Toggle dithering
 //!   Escape     — Exit
 
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use image::{DynamicImage, ImageBuffer};
 use nokhwa::{
     nokhwa_initialize,
-    query,
     pixel_format::RgbFormat,
+    query,
     utils::{ApiBackend, CameraIndex, RequestedFormat, RequestedFormatType},
     Buffer, Camera,
 };
@@ -33,38 +39,41 @@ use winit::{
     window::{Window, WindowAttributes},
 };
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
 const INITIAL_WIDTH: u32 = 640;
 const INITIAL_HEIGHT: u32 = 480;
-const TARGET_FPS: u32 = 30;
-
-// ---------------------------------------------------------------------------
-// Application state
-// ---------------------------------------------------------------------------
 
 struct PaintifyApp {
     window: Option<Window>,
     pixels: Option<Pixels<'static>>,
     camera: Option<Camera>,
     config: PaintConfig,
+    target_fps: u32,
+    last_frame_time: Instant,
     frame_count: u64,
     last_fps_print: Instant,
 }
 
 impl PaintifyApp {
-    fn new() -> Self {
+    fn new(cli: CliArgs) -> Self {
         let _ = env_logger::try_init();
 
         Self {
             window: None,
             pixels: None,
             camera: None,
-            config: PaintConfig::default(),
+            config: PaintConfig::default()
+                .chunky(cli.pixel_size)
+                .extended_palette(cli.palette == 28)
+                .with_dithering(cli.dithering),
+            target_fps: cli.fps,
+            last_frame_time: Instant::now(),
             frame_count: 0,
             last_fps_print: Instant::now(),
         }
+    }
+
+    fn frame_interval(&self) -> Duration {
+        Duration::from_secs_f64(1.0 / self.target_fps as f64)
     }
 
     fn init_camera(&mut self) {
@@ -78,7 +87,8 @@ impl PaintifyApp {
             return;
         }
 
-        let format = RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
+        let format =
+            RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
         let idx = CameraIndex::Index(0);
 
         match Camera::new(idx, format) {
@@ -94,7 +104,9 @@ impl PaintifyApp {
     }
 
     fn process_frame(&mut self) {
-        let Some(ref mut cam) = self.camera else { return };
+        let Some(ref mut cam) = self.camera else {
+            return;
+        };
 
         let frame: Buffer = match cam.frame() {
             Ok(f) => f,
@@ -104,7 +116,6 @@ impl PaintifyApp {
         let rgb_buf = frame.decode_image::<RgbFormat>().unwrap();
         let (cam_w, cam_h) = (rgb_buf.width(), rgb_buf.height());
 
-        // Convert nokhwa frame to DynamicImage
         let img_buf: ImageBuffer<image::Rgba<u8>, Vec<u8>> =
             ImageBuffer::from_fn(cam_w, cam_h, |x, y| {
                 let px = rgb_buf.get_pixel(x, y);
@@ -112,11 +123,9 @@ impl PaintifyApp {
             });
         let img = DynamicImage::ImageRgba8(img_buf);
 
-        // Paintify it!
         let processed = paintify(&img, &self.config);
         let rgba = processed.to_rgba8();
 
-        // Write to the pixels framebuffer
         if let Some(ref mut px) = self.pixels {
             let fb_w = px.context().texture_extent.width;
             let fb_h = px.context().texture_extent.height;
@@ -140,15 +149,19 @@ impl PaintifyApp {
 
         self.frame_count += 1;
 
-        // FPS counter
         let elapsed = self.last_fps_print.elapsed();
         if elapsed.as_secs_f64() > 5.0 {
             let fps = self.frame_count as f64 / elapsed.as_secs_f64();
             self.window.as_ref().map(|w| {
-                w.set_title(&format!("Paintify Webcam — {:.0}fps | pixel_size={} | palette={}",
+                w.set_title(&format!(
+                    "Paintify Webcam — {:.0}fps | pixel={} | palette={}",
                     fps,
                     self.config.downscale_factor,
-                    if self.config.extended_palette { "28" } else { "16" }
+                    if self.config.extended_palette {
+                        "28"
+                    } else {
+                        "16"
+                    }
                 ));
             });
             self.frame_count = 0;
@@ -167,14 +180,19 @@ impl PaintifyApp {
                 log::info!("Pixel size: {}", self.config.downscale_factor);
             }
             Key::Named(NamedKey::ArrowDown) => {
-                self.config.downscale_factor = (self.config.downscale_factor.saturating_sub(1)).max(1);
+                self.config.downscale_factor =
+                    (self.config.downscale_factor.saturating_sub(1)).max(1);
                 log::info!("Pixel size: {}", self.config.downscale_factor);
             }
             Key::Character(c) if c == "p" || c == "P" => {
                 self.config.extended_palette = !self.config.extended_palette;
                 log::info!(
                     "Palette: {}",
-                    if self.config.extended_palette { "28-color" } else { "16-color" }
+                    if self.config.extended_palette {
+                        "28-color"
+                    } else {
+                        "16-color"
+                    }
                 );
             }
             Key::Character(c) if c == "d" || c == "D" => {
@@ -192,10 +210,6 @@ impl PaintifyApp {
     }
 }
 
-// ---------------------------------------------------------------------------
-// winit ApplicationHandler
-// ---------------------------------------------------------------------------
-
 impl ApplicationHandler for PaintifyApp {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if self.window.is_some() {
@@ -212,7 +226,8 @@ impl ApplicationHandler for PaintifyApp {
             .expect("Failed to create window");
 
         let window_size = window.inner_size();
-        let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
+        let surface_texture =
+            SurfaceTexture::new(window_size.width, window_size.height, &window);
 
         let pixels = Pixels::new(INITIAL_WIDTH, INITIAL_HEIGHT, surface_texture)
             .expect("Failed to create Pixels surface");
@@ -226,10 +241,11 @@ impl ApplicationHandler for PaintifyApp {
         self.pixels = Some(pixels_static);
         self.init_camera();
 
-        // Request redraws at ~30fps
-        event_loop.set_control_flow(ControlFlow::wait_duration(
-            std::time::Duration::from_millis(1000 / TARGET_FPS as u64),
-        ));
+        self.last_frame_time = Instant::now();
+        if let Some(ref window) = self.window {
+            window.request_redraw();
+        }
+        event_loop.set_control_flow(ControlFlow::Poll);
     }
 
     fn window_event(
@@ -251,17 +267,22 @@ impl ApplicationHandler for PaintifyApp {
                 }
             }
             WindowEvent::KeyboardInput {
-                event: KeyEvent {
-                    logical_key: key,
-                    state,
-                    ..
-                },
+                event:
+                    KeyEvent {
+                        logical_key: key,
+                        state,
+                        ..
+                    },
                 ..
             } => {
                 self.handle_key(&key, state);
             }
             WindowEvent::RedrawRequested => {
-                self.process_frame();
+                let elapsed = self.last_frame_time.elapsed();
+                if elapsed >= self.frame_interval() {
+                    self.process_frame();
+                    self.last_frame_time = Instant::now();
+                }
                 if let Some(ref window) = self.window {
                     window.request_redraw();
                 }
@@ -272,14 +293,100 @@ impl ApplicationHandler for PaintifyApp {
 }
 
 // ---------------------------------------------------------------------------
-// Entry point
+// CLI argument parsing (manual — no clap dependency)
 // ---------------------------------------------------------------------------
 
+const HELP: &str = "\
+paintify-webcam — make your webcam look like MS Paint
+
+USAGE:
+    paintify-webcam [OPTIONS]
+
+OPTIONS:
+    --fps N           Target frames per second (default: 60, range: 1–120)
+    --pixel-size N    Pixel crunch factor, higher = chunkier (default: 3, range: 1–32)
+    --palette N       Color palette: 16 or 28 (default: 16)
+    --dithering       Enable Bayer ordered dithering
+    --help, -h        Show this help message
+
+CONTROLS (in window):
+    ↑ / ↓             Adjust pixel size
+    P                 Toggle 16/28 color palette
+    D                 Toggle dithering
+    Escape            Exit
+";
+
+struct CliArgs {
+    fps: u32,
+    pixel_size: u32,
+    palette: u32,
+    dithering: bool,
+}
+
+impl Default for CliArgs {
+    fn default() -> Self {
+        Self {
+            fps: 60,
+            pixel_size: 3,
+            palette: 16,
+            dithering: false,
+        }
+    }
+}
+
+fn parse_args() -> CliArgs {
+    let args: Vec<String> = std::env::args().collect();
+    let mut cli = CliArgs::default();
+    let mut i = 1;
+
+    while i < args.len() {
+        match args[i].as_str() {
+            "--help" | "-h" => {
+                eprintln!("{HELP}");
+                std::process::exit(0);
+            }
+            "--fps" => {
+                i += 1;
+                if let Some(val) = args.get(i) {
+                    cli.fps = val.parse::<u32>().unwrap_or(60).clamp(1, 120);
+                }
+            }
+            "--pixel-size" => {
+                i += 1;
+                if let Some(val) = args.get(i) {
+                    cli.pixel_size = val.parse::<u32>().unwrap_or(3).clamp(1, 32);
+                }
+            }
+            "--palette" => {
+                i += 1;
+                if let Some(val) = args.get(i) {
+                    let p = val.parse::<u32>().unwrap_or(16);
+                    cli.palette = if p == 28 { 28 } else { 16 };
+                }
+            }
+            "--dithering" => {
+                cli.dithering = true;
+            }
+            other => {
+                eprintln!("Unknown flag: {other}");
+                eprintln!("Run with --help for usage.");
+                std::process::exit(1);
+            }
+        }
+        i += 1;
+    }
+
+    cli
+}
+
 fn main() {
-    let mut app = PaintifyApp::new();
+    let cli = parse_args();
+    let mut app = PaintifyApp::new(cli);
 
     let event_loop = EventLoop::new().expect("Failed to create event loop");
     event_loop.set_control_flow(ControlFlow::Poll);
 
-    event_loop.run_app(&mut app).expect("Event loop failed");
+    event_loop
+        .run_app(&mut app)
+        .expect("Event loop failed");
 }
