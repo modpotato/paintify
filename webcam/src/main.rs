@@ -28,7 +28,7 @@ use nokhwa::{
     pixel_format::RgbFormat,
     query,
     utils::{ApiBackend, CameraIndex, RequestedFormat, RequestedFormatType},
-    Buffer, CallbackCamera,
+    Buffer, CallbackCamera, Camera,
 };
 use paintify_core::{paintify, PaintConfig};
 use pixels::{Pixels, SurfaceTexture};
@@ -97,34 +97,48 @@ impl PaintifyApp {
             return;
         }
 
-        let format =
-            RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate);
         let idx = CameraIndex::Index(0);
 
         let counter = self.frame_counter.clone();
-        match CallbackCamera::new(idx, format, move |_buffer| {
-            counter.fetch_add(1, Ordering::Relaxed);
-        }) {
-            Ok(mut cam) => {
-                let before_fps = cam.frame_rate().unwrap_or(0);
-                match cam.set_frame_rate(30) {
-                    Ok(()) => log::info!("set_frame_rate(30) OK"),
-                    Err(e) => log::error!("set_frame_rate(30) FAILED: {e}"),
-                }
-                let after_fps = cam.frame_rate().unwrap_or(0);
-                log::info!("Camera frame rate: before={before_fps}, after={after_fps}");
 
-                cam.open_stream().expect("Failed to open camera stream");
-                log::info!(
-                    "Camera opened: {} (threaded capture)",
-                    cameras[0].human_name()
-                );
-                self.camera = Some(cam);
-            }
+        let mut camera = match Camera::new(
+            idx,
+            RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestResolution),
+        ) {
+            Ok(c) => c,
             Err(e) => {
-                log::error!("Failed to open camera: {e}");
+                log::error!("Failed to create camera: {e}");
+                return;
+            }
+        };
+
+        log::info!("Camera: {}", cameras[0].human_name());
+
+        if let Ok(formats) = camera.compatible_camera_formats() {
+            log::info!("Found {} compatible formats", formats.len());
+            for fmt in formats.iter().take(10) {
+                log::info!(
+                    "  {}x{} @ {}fps {:?}",
+                    fmt.resolution().width(),
+                    fmt.resolution().height(),
+                    fmt.frame_rate(),
+                    fmt.format()
+                );
             }
         }
+
+        if let Err(e) = camera.set_frame_rate(30) {
+            log::error!("set_frame_rate(30) FAILED: {e}");
+        }
+        log::info!("Frame rate after set: {}", camera.frame_rate());
+
+        let mut cb = CallbackCamera::with_custom(camera, move |_buffer| {
+            counter.fetch_add(1, Ordering::Relaxed);
+        });
+        cb.open_stream().expect("Failed to start capture thread");
+
+        log::info!("Capture thread started");
+        self.camera = Some(cb);
     }
 
     fn process_frame(&mut self) {
