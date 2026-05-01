@@ -103,7 +103,7 @@ impl PaintifyApp {
 
         let mut camera = match Camera::new(
             idx,
-            RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestResolution),
+            RequestedFormat::new::<RgbFormat>(RequestedFormatType::AbsoluteHighestFrameRate),
         ) {
             Ok(c) => c,
             Err(e) => {
@@ -116,21 +116,30 @@ impl PaintifyApp {
 
         if let Ok(formats) = camera.compatible_camera_formats() {
             log::info!("Found {} compatible formats", formats.len());
-            for fmt in formats.iter().take(10) {
+            let best = formats
+                .iter()
+                .filter(|f| f.frame_rate() >= 15 && f.resolution().width() <= 1280)
+                .max_by_key(|f| f.resolution().width());
+            if let Some(bf) = best {
                 log::info!(
-                    "  {}x{} @ {}fps {:?}",
-                    fmt.resolution().width(),
-                    fmt.resolution().height(),
-                    fmt.frame_rate(),
-                    fmt.format()
+                    "Selected: {}x{} @ {}fps {:?}",
+                    bf.resolution().width(),
+                    bf.resolution().height(),
+                    bf.frame_rate(),
+                    bf.format()
                 );
+                #[allow(deprecated)]
+                if let Err(e) = camera.set_camera_format(*bf) {
+                    log::error!("set_camera_format FAILED: {e}");
+                }
             }
         }
-
-        if let Err(e) = camera.set_frame_rate(30) {
-            log::error!("set_frame_rate(30) FAILED: {e}");
-        }
-        log::info!("Frame rate after set: {}", camera.frame_rate());
+        log::info!(
+            "Final config: {}x{} @ {}fps",
+            camera.resolution().width(),
+            camera.resolution().height(),
+            camera.frame_rate(),
+        );
 
         let mut cb = CallbackCamera::with_custom(camera, move |_buffer| {
             counter.fetch_add(1, Ordering::Relaxed);
