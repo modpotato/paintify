@@ -6,9 +6,6 @@
  */
 export function init(): void;
 
-/**
- * Convenience: quick paintify with sensible defaults (16-color, 4x crunch).
- */
 export function paintify_default_js(input_data: Uint8Array): Uint8Array;
 
 /**
@@ -23,14 +20,14 @@ export function paintify_default_js(input_data: Uint8Array): Uint8Array;
  * # Returns
  * Raw bytes of a PNG image, or an empty Vec on error.
  */
-export function paintify_js(input_data: Uint8Array, pixel_size: number, extended_palette: boolean): Uint8Array;
+export function paintify_js(input_data: Uint8Array, pixel_size: number, extended_palette: boolean, kuwahara_radius: number, edge_overlay: boolean): Uint8Array;
 
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
     readonly paintify_default_js: (a: number, b: number) => [number, number];
-    readonly paintify_js: (a: number, b: number, c: number, d: number) => [number, number];
+    readonly paintify_js: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number];
     readonly init: () => void;
     readonly __wbindgen_free: (a: number, b: number, c: number) => void;
     readonly __wbindgen_malloc: (a: number, b: number) => number;

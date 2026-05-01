@@ -198,6 +198,17 @@
                     28-color palette
                 </label>
 
+                <label>
+                    <input type="checkbox" id="edgeOverlay" checked>
+                    Pencil outlines
+                </label>
+
+                <label>
+                    Kuwahara
+                    <input type="range" id="kuwaharaRadius" min="0" max="5" value="2">
+                    <span id="kuwaharaLabel">2</span>
+                </label>
+
                 <button id="processBtn" class="primary" disabled>Paintify!</button>
                 <button id="downloadBtn" disabled>Save PNG</button>
             </div>
@@ -234,6 +245,9 @@
         const pixelSizeSlider = document.getElementById('pixelSize');
         const pixelSizeLabel = document.getElementById('pixelSizeLabel');
         const extendedPaletteCheck = document.getElementById('extendedPalette');
+        const edgeOverlayCheck = document.getElementById('edgeOverlay');
+        const kuwaharaSlider = document.getElementById('kuwaharaRadius');
+        const kuwaharaLabel = document.getElementById('kuwaharaLabel');
         const processBtn = document.getElementById('processBtn');
         const downloadBtn = document.getElementById('downloadBtn');
         const originalCanvas = document.getElementById('originalCanvas');
@@ -257,6 +271,10 @@
 
             pixelSizeSlider.addEventListener('input', () => {
                 pixelSizeLabel.textContent = pixelSizeSlider.value;
+            });
+
+            kuwaharaSlider.addEventListener('input', () => {
+                kuwaharaLabel.textContent = kuwaharaSlider.value;
             });
 
             dropZone.addEventListener('click', () => fileInput.click());
@@ -321,12 +339,14 @@
 
             const pixelSize = parseInt(pixelSizeSlider.value, 10);
             const extended = extendedPaletteCheck.checked;
+            const kuwahara = parseInt(kuwaharaSlider.value, 10);
+            const edges = edgeOverlayCheck.checked;
 
             statusEl.textContent = 'Paintifying...';
             processBtn.disabled = true;
 
             try {
-                resultImageBytes = paintify_js(originalImageBytes, pixelSize, extended);
+                resultImageBytes = paintify_js(originalImageBytes, pixelSize, extended, kuwahara, edges);
 
                 if (!resultImageBytes || resultImageBytes.length === 0) {
                     statusEl.textContent = 'Paintify returned empty result.';
@@ -341,7 +361,7 @@
                     drawImage(resultCanvas, img);
                     URL.revokeObjectURL(url);
                     downloadBtn.disabled = false;
-                    statusEl.textContent = `Done! pixel_size=${pixelSize}, palette=${extended ? '28' : '16'}`;
+                    statusEl.textContent = `Done! pixel=${pixelSize}, palette=${extended ? '28' : '16'}, kuwahara=${kuwahara}, edges=${edges}`;
                     processBtn.disabled = false;
                 };
                 img.onerror = () => {

@@ -32,22 +32,26 @@ pub fn init() {
 /// # Returns
 /// Raw bytes of a PNG image, or an empty Vec on error.
 #[wasm_bindgen]
-pub fn paintify_js(input_data: &[u8], pixel_size: u32, extended_palette: bool) -> Vec<u8> {
-    // Load the image from the byte buffer
+pub fn paintify_js(
+    input_data: &[u8],
+    pixel_size: u32,
+    extended_palette: bool,
+    kuwahara_radius: u32,
+    edge_overlay: bool,
+) -> Vec<u8> {
     let img = match load_from_memory(input_data) {
         Ok(img) => img,
         Err(_) => return Vec::new(),
     };
 
-    // Build configuration from JS parameters
     let config = PaintConfig::default()
         .chunky(pixel_size)
-        .extended_palette(extended_palette);
+        .extended_palette(extended_palette)
+        .with_kuwahara(kuwahara_radius)
+        .with_edges(edge_overlay);
 
-    // Run the Paintify pipeline
     let processed = paintify(&img, &config);
 
-    // Encode back to PNG
     let mut buffer = Cursor::new(Vec::new());
     if processed.write_to(&mut buffer, image::ImageFormat::Png).is_err() {
         return Vec::new();
@@ -56,8 +60,7 @@ pub fn paintify_js(input_data: &[u8], pixel_size: u32, extended_palette: bool) -
     buffer.into_inner()
 }
 
-/// Convenience: quick paintify with sensible defaults (16-color, 4x crunch).
 #[wasm_bindgen]
 pub fn paintify_default_js(input_data: &[u8]) -> Vec<u8> {
-    paintify_js(input_data, 4, false)
+    paintify_js(input_data, 4, false, 2, true)
 }

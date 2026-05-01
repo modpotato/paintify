@@ -8,7 +8,6 @@ export function init() {
 }
 
 /**
- * Convenience: quick paintify with sensible defaults (16-color, 4x crunch).
  * @param {Uint8Array} input_data
  * @returns {Uint8Array}
  */
@@ -35,12 +34,14 @@ export function paintify_default_js(input_data) {
  * @param {Uint8Array} input_data
  * @param {number} pixel_size
  * @param {boolean} extended_palette
+ * @param {number} kuwahara_radius
+ * @param {boolean} edge_overlay
  * @returns {Uint8Array}
  */
-export function paintify_js(input_data, pixel_size, extended_palette) {
+export function paintify_js(input_data, pixel_size, extended_palette, kuwahara_radius, edge_overlay) {
     const ptr0 = passArray8ToWasm0(input_data, wasm.__wbindgen_malloc);
     const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.paintify_js(ptr0, len0, pixel_size, extended_palette);
+    const ret = wasm.paintify_js(ptr0, len0, pixel_size, extended_palette, kuwahara_radius, edge_overlay);
     var v2 = getArrayU8FromWasm0(ret[0], ret[1]).slice();
     wasm.__wbindgen_free(ret[0], ret[1] * 1, 1);
     return v2;
