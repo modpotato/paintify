@@ -1,0 +1,16 @@
+{
+  "name": "paintify-web",
+  "type": "module",
+  "description": "WebAssembly bindings for paintify-core — drop images in a browser and paintify them",
+  "version": "0.1.0",
+  "files": [
+    "paintify_web_bg.wasm",
+    "paintify_web.js",
+    "paintify_web.d.ts"
+  ],
+  "main": "paintify_web.js",
+  "types": "paintify_web.d.ts",
+  "sideEffects": [
+    "./snippets/*"
+  ]
+}

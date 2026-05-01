@@ -1,0 +1,18 @@
+# Rust
+target/
+debug/
+**/*.rs.bk
+*.pdb
+
+# WASM build artifacts (pkg is tracked separately in frontend/)
+web/pkg/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

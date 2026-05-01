@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Paintify — MS Paint Image Cruncher</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #c0c0c0;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .titlebar {
+            width: 100%;
+            background: linear-gradient(90deg, #000080, #1084d0);
+            color: white;
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: bold;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .titlebar::before {
+            content: '';
+            display: inline-block;
+            width: 32px;
+            height: 32px;
+            background: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><rect x="2" y="2" width="12" height="12" fill="%23ff0"/><rect x="18" y="2" width="12" height="12" fill="%23f00"/><rect x="2" y="18" width="12" height="12" fill="%2300f"/><rect x="18" y="18" width="12" height="12" fill="%230f0"/></svg>') center/contain no-repeat;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 800px;
+            margin: 24px auto;
+            background: #c0c0c0;
+            border: 2px solid;
+            border-color: #fff #808080 #808080 #fff;
+            padding: 2px;
+        }
+
+        .container-inner {
+            border: 2px solid;
+            border-color: #808080 #fff #fff #808080;
+            padding: 16px;
+            background: #c0c0c0;
+        }
+
+        h2 {
+            font-size: 14px;
+            margin-bottom: 12px;
+            color: #000;
+        }
+
+        .drop-zone {
+            border: 2px dashed #808080;
+            border-radius: 0;
+            padding: 48px 24px;
+            text-align: center;
+            cursor: pointer;
+            background: #fff;
+            transition: background 0.15s;
+            margin-bottom: 16px;
+        }
+
+        .drop-zone.drag-over { background: #ff0; border-color: #000; }
+
+        .drop-zone p {
+            font-size: 14px;
+            color: #808080;
+            pointer-events: none;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        label {
+            font-size: 13px;
+            color: #000;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        input[type="range"] {
+            width: 100px;
+            accent-color: #000080;
+        }
+
+        button {
+            font-family: 'Segoe UI', Tahoma, sans-serif;
+            font-size: 13px;
+            padding: 6px 18px;
+            background: #c0c0c0;
+            border: 2px solid;
+            border-color: #fff #808080 #808080 #fff;
+            cursor: pointer;
+            color: #000;
+        }
+
+        button:active {
+            border-color: #808080 #fff #fff #808080;
+        }
+
+        button.primary {
+            font-weight: bold;
+        }
+
+        .preview-area {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+        }
+
+        .preview-box {
+            flex: 1;
+            min-width: 250px;
+            text-align: center;
+        }
+
+        .preview-box h3 {
+            font-size: 12px;
+            margin-bottom: 8px;
+            color: #000;
+        }
+
+        .preview-box canvas {
+            max-width: 100%;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+            border: 1px solid #808080;
+            background: #fff;
+        }
+
+        .status {
+            font-size: 12px;
+            color: #000;
+            margin-top: 8px;
+            min-height: 18px;
+        }
+
+        .status-bar {
+            width: 100%;
+            max-width: 800px;
+            margin-top: 4px;
+            padding: 4px 8px;
+            background: #c0c0c0;
+            border: 2px solid;
+            border-color: #808080 #fff #fff #808080;
+            font-size: 12px;
+            color: #000;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        footer {
+            margin-top: auto;
+            padding: 12px;
+            font-size: 11px;
+            color: #808080;
+            text-align: center;
+        }
+
+        footer a { color: #000080; }
+    </style>
+</head>
+<body>
+    <div class="titlebar">🖌 Paintify — Make Any Image Look Like MS Paint</div>
+
+    <div class="container">
+        <div class="container-inner">
+            <div class="drop-zone" id="dropZone">
+                <p>Drop an image here, or click to browse</p>
+                <input type="file" id="fileInput" accept="image/png,image/jpeg,image/webp" hidden>
+            </div>
+
+            <div class="controls">
+                <label>
+                    Pixel Size
+                    <input type="range" id="pixelSize" min="1" max="16" value="4">
+                    <span id="pixelSizeLabel">4</span>
+                </label>
+
+                <label>
+                    <input type="checkbox" id="extendedPalette">
+                    28-color palette
+                </label>
+
+                <button id="processBtn" class="primary" disabled>Paintify!</button>
+                <button id="downloadBtn" disabled>Save PNG</button>
+            </div>
+
+            <div class="preview-area">
+                <div class="preview-box">
+                    <h3>Original</h3>
+                    <canvas id="originalCanvas"></canvas>
+                </div>
+                <div class="preview-box">
+                    <h3>Paintified</h3>
+                    <canvas id="resultCanvas"></canvas>
+                </div>
+            </div>
+
+            <div class="status" id="status"></div>
+        </div>
+    </div>
+
+    <div class="status-bar">
+        <span id="wasmStatus">Loading WASM...</span>
+        <span>Made with Rust + WebAssembly</span>
+    </div>
+
+    <footer>
+        <a href="https://github.com" target="_blank">Paintify on GitHub</a> — MIT License
+    </footer>
+
+    <script type="module">
+        import init, { paintify_js, paintify_default_js } from './pkg/paintify_web.js';
+
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const pixelSizeSlider = document.getElementById('pixelSize');
+        const pixelSizeLabel = document.getElementById('pixelSizeLabel');
+        const extendedPaletteCheck = document.getElementById('extendedPalette');
+        const processBtn = document.getElementById('processBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const originalCanvas = document.getElementById('originalCanvas');
+        const resultCanvas = document.getElementById('resultCanvas');
+        const statusEl = document.getElementById('status');
+        const wasmStatusEl = document.getElementById('wasmStatus');
+
+        let originalImageBytes = null;
+        let resultImageBytes = null;
+
+        async function main() {
+            try {
+                await init();
+                wasmStatusEl.textContent = 'WASM ready';
+            } catch (e) {
+                wasmStatusEl.textContent = 'WASM failed: ' + e.message;
+                statusEl.textContent = 'Failed to load WebAssembly module. Check console.';
+                console.error(e);
+                return;
+            }
+
+            pixelSizeSlider.addEventListener('input', () => {
+                pixelSizeLabel.textContent = pixelSizeSlider.value;
+            });
+
+            dropZone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', (e) => handleFile(e.target.files[0]));
+
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('drag-over');
+            });
+
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('drag-over');
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('drag-over');
+                const file = e.dataTransfer.files[0];
+                if (file) handleFile(file);
+            });
+
+            processBtn.addEventListener('click', processImage);
+            downloadBtn.addEventListener('click', downloadResult);
+        }
+
+        async function handleFile(file) {
+            if (!file || !file.type.match(/image\/(png|jpeg|webp)/)) {
+                statusEl.textContent = 'Please drop a PNG, JPEG, or WebP image.';
+                return;
+            }
+
+            statusEl.textContent = 'Loading...';
+            originalImageBytes = new Uint8Array(await file.arrayBuffer());
+
+            const img = new Image();
+            const url = URL.createObjectURL(file);
+            img.onload = () => {
+                drawImage(originalCanvas, img);
+                URL.revokeObjectURL(url);
+                processBtn.disabled = false;
+                statusEl.textContent = `Loaded: ${file.name} (${img.naturalWidth}x${img.naturalHeight})`;
+            };
+            img.onerror = () => {
+                statusEl.textContent = 'Failed to decode image.';
+                URL.revokeObjectURL(url);
+            };
+            img.src = url;
+        }
+
+        function drawImage(canvas, img) {
+            canvas.width = img.naturalWidth;
+            canvas.height = img.naturalHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0);
+        }
+
+        function processImage() {
+            if (!originalImageBytes) {
+                statusEl.textContent = 'No image loaded.';
+                return;
+            }
+
+            const pixelSize = parseInt(pixelSizeSlider.value, 10);
+            const extended = extendedPaletteCheck.checked;
+
+            statusEl.textContent = 'Paintifying...';
+            processBtn.disabled = true;
+
+            try {
+                resultImageBytes = paintify_js(originalImageBytes, pixelSize, extended);
+
+                if (!resultImageBytes || resultImageBytes.length === 0) {
+                    statusEl.textContent = 'Paintify returned empty result.';
+                    processBtn.disabled = false;
+                    return;
+                }
+
+                const blob = new Blob([resultImageBytes], { type: 'image/png' });
+                const url = URL.createObjectURL(blob);
+                const img = new Image();
+                img.onload = () => {
+                    drawImage(resultCanvas, img);
+                    URL.revokeObjectURL(url);
+                    downloadBtn.disabled = false;
+                    statusEl.textContent = `Done! pixel_size=${pixelSize}, palette=${extended ? '28' : '16'}`;
+                    processBtn.disabled = false;
+                };
+                img.onerror = () => {
+                    statusEl.textContent = 'Failed to decode result.';
+                    URL.revokeObjectURL(url);
+                    processBtn.disabled = false;
+                };
+                img.src = url;
+            } catch (e) {
+                statusEl.textContent = 'Error: ' + e.message;
+                console.error(e);
+                processBtn.disabled = false;
+            }
+        }
+
+        function downloadResult() {
+            if (!resultImageBytes) return;
+            const blob = new Blob([resultImageBytes], { type: 'image/png' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'paintified.png';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        main();
+    </script>
+</body>
+</html>

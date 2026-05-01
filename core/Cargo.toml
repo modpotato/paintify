@@ -1,0 +1,13 @@
+[package]
+name = "paintify-core"
+version = "0.1.0"
+edition = "2021"
+description = "MS Paint-style image quantization and pixel-crunching pipeline"
+
+[dependencies]
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
+
+[features]
+default = []
+# Enable Bayer ordered dithering for extra crunch
+dithering = []
